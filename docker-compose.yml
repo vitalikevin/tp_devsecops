@@ -1,35 +1,53 @@
 services:
   api-python:
     build: .
+    image: ghcr.io/vitalikevin/tp_devsecops/api:local
     ports:
       - "5000:5000"
     environment:
-      - ENV=test
-      - DB_USER=testuser
-      - DB_PASSWORD=testpass
-      - DB_NAME=testdb
-      - DB_HOST=db
-      - DB_PORT=5432
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - backend
+      - frontend
     depends_on:
       db:
         condition: service_healthy
-  
-  db:
-    image: postgres:14-alpine
-    environment:
-      POSTGRES_USER: testuser
-      POSTGRES_PASSWORD: testpass
-      POSTGRES_DB: testdb
-    ports:
-      - "5432:5432"
-    volumes:
-      - db-data-test:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  db:
+    image: cgr.dev/chainguard/postgres@sha256:0c4eaf6cb9bd65337d834f5ebfe79add4312ee2125ab584bf1fbc071abc6bb8f
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
+networks:
+  backend:
+    internal: true
+  frontend: {}
+
 volumes:
-  db-data-test:
+  db-data:
