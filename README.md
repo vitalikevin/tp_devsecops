@@ -6,8 +6,6 @@ Package de l'API : https://github.com/vitalikevin/tp_devsecops/pkgs/container/tp
 
 ```bash
 docker pull ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
-docker pull ghcr.io/vitalikevin/tp_devsecops/api:1.0
-docker pull ghcr.io/vitalikevin/tp_devsecops/api:1
 ```
 
 ## 2. Avant / Après
@@ -42,13 +40,13 @@ test: ["CMD", "/usr/bin/python", "-c", "import sys, urllib.request; sys.exit(0 i
 test: ["CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}"]
 ```
 
-L'API attend la base avec `depends_on: condition: service_healthy`. La base est seule sur un réseau `internal`, sans port publié. Les identifiants sont dans un `.env` non versionné (voir `.env.example`).
+L'API attend la base avec `depends_on: condition: service_healthy`.
 
 L'image Postgres contient `bash` pour son script d'entrée. Le processus `postgres` tourne en UID 70, pas en root.
 
 ## 5. Remédiations
 
-**Flake8 :** 0 violation avec le `.flake8` fourni.
+**Flake8 :** 0 violation avec le `.flake8` fourni ; `app.py` et `test_app.py` d'origine n'ont rien eu à corriger.
 
 **Dépendances :**
 
@@ -90,11 +88,6 @@ $ hadolint Dockerfile
 $ echo $?
 0
 ```
-Avec un Dockerfile fautif :
-```
--:1 DL3007 error: Using latest is prone to errors if the image will ever update. Pin the version explicitly to a release tag
--:2 DL3002 error: Last USER should not be root
-```
 
 **Dive :**
 ```
@@ -125,4 +118,9 @@ $ curl -f http://localhost:5000/dbtest
 2 passed, 1 deselected
 ```
 
-**CI et publication GHCR :** lien du run à ajouter après la release `v1.0.0`.
+**Publication GHCR :**
+```
+$ docker pull ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
+Digest: sha256:4624119c4e7b55989d1cc6789e96f223d89359223d2b24ac5fe6e87448fc6bf3
+Status: Image is up to date for ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
+```
