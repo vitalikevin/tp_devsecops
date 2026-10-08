@@ -19,7 +19,7 @@ services:
     healthcheck:
       test:
         - "CMD"
-        - "python"
+        - "/usr/bin/python"
         - "-c"
         - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).status == 200 else 1)"
       interval: 10s
