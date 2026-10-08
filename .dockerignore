@@ -1,0 +1,30 @@
+# Fichiers d'environnement locaux
+.env
+.env.*
+*.env
+venv
+.venv
+
+# Caches de compilation Python
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+
+# Fichiers de tests
+test_*.py
+*_test.py
+tests
+
+# Métadonnées Git
+.git
+.gitignore
+
+# Logs
+*.log
+
+# Archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip

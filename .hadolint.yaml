@@ -1,0 +1,18 @@
+failure-threshold: warning
+no-fail: false
+
+override:
+  error:
+    - DL3002
+    - DL3006
+    - DL3007
+    - DL4006
+  warning:
+    - SC2086
+    - SC2164
+
+trustedRegistries:
+  - docker.io
+  - gcr.io
+  - cgr.dev
+  - ghcr.io
