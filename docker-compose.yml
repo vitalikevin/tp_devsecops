@@ -1,6 +1,9 @@
 services:
   api-python:
-    build: .
+    build:
+      context: .
+      secrets:
+        - pip_config
     image: ghcr.io/vitalikevin/tp_devsecops/api:local
     ports:
       - "5000:5000"
@@ -51,3 +54,7 @@ networks:
 
 volumes:
   db-data:
+
+secrets:
+  pip_config:
+    file: ./secrets/pip.conf

@@ -28,3 +28,6 @@ tests
 *.tar.gz
 *.tgz
 *.zip
+
+# Secrets de build
+secrets

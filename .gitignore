@@ -11,3 +11,5 @@ venv/
 
 *.log
 *.tar
+
+secrets/
