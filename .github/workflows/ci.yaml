@@ -49,6 +49,8 @@ jobs:
           context: .
           load: true
           tags: ${{ env.IMAGE_NAME }}:ci
+          secrets: |
+            pip_config=${{ secrets.PIP_CONFIG }}
       - run: docker save "$IMAGE_NAME:ci" -o image.tar
       - name: Dive
         run: |

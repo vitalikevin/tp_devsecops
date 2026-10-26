@@ -4,6 +4,8 @@ WORKDIR /app
 RUN python -m venv --without-pip /app/venv
 COPY requirements.txt .
 RUN --mount=type=cache,target=/home/nonroot/.cache/pip,uid=65532,gid=65532 \
+    --mount=type=secret,id=pip_config,target=/home/nonroot/.config/pip/pip.conf,required=true,uid=65532,gid=65532 \
+    test -s /home/nonroot/.config/pip/pip.conf && \
     pip --python /app/venv/bin/python install -r requirements.txt
 
 FROM cgr.dev/chainguard/python:latest@sha256:49fd266eb8a1331194c318b742087c7a2939cc5794fa64f17feb9e17e12703e2
