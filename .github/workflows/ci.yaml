@@ -50,7 +50,8 @@ jobs:
           load: true
           tags: ${{ env.IMAGE_NAME }}:ci
           secrets: |
-            pip_config=${{ secrets.PIP_CONFIG }}
+            "pip_config=${{ secrets.PIP_CONFIG }}"
+      - run: docker history --no-trunc "$IMAGE_NAME:ci"
       - run: docker save "$IMAGE_NAME:ci" -o image.tar
       - name: Dive
         run: |
