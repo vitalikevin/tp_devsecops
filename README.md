@@ -5,7 +5,7 @@
 Package de l'API : https://github.com/vitalikevin/tp_devsecops/pkgs/container/tp_devsecops%2Fapi
 
 ```bash
-docker pull ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
+docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
 ```
 
 ## 2. Avant / Après
@@ -172,8 +172,18 @@ En CI, le job `build` affiche `docker history --no-trunc`, et le job `trivy` sca
 
 ```
 $ docker buildx imagetools inspect ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
+Name:      ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
+
+Manifests:
+  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:826791e8ae0cc2ca0c3bccc958fd14e6596f990c8baa95878b397eda2ef4b35a
+  Platform:    linux/amd64
+
+  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:7aab2b4e72b0fb80ba23f9a122d2ffcede308023f3d0cb45bbb787f4b206fa05
+  Platform:    linux/arm64
 ```
-Sortie à ajouter après la release `v2.0.0`.
+Les deux autres entrées de l'index (`unknown/unknown`) sont les attestations de provenance ajoutées par BuildKit.
 
 ## 9. Analyse de Traçabilité & Gouvernance VEX
 
@@ -271,7 +281,7 @@ $ grype sbom:sbom.cdx.json -o json | jq '[.ignoredMatches[] | {id: .vulnerabilit
 
 Image publiée :
 ```
-ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:<digest>
+ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
 ```
 
 Signature keyless, donc pas de `cosign.pub` : la vérification se fait sur l'identité OIDC du workflow (`IDENTITY` et `ISSUER` ci-dessous).
@@ -280,18 +290,33 @@ Le job `sign` signe l'index multi-arch par son digest, puis lui attache le SBOM 
 
 Commandes (cosign 3 et jq) :
 ```bash
-IMAGE=ghcr.io/vitalikevin/tp_devsecops/api@sha256:<digest>
+IMAGE=ghcr.io/vitalikevin/tp_devsecops/api@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
 IDENTITY=https://github.com/vitalikevin/tp_devsecops/.github/workflows/ci.yaml@refs/tags/v2.0.0
 ISSUER=https://token.actions.githubusercontent.com
 
 cosign verify "$IMAGE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
 
 cosign verify-attestation "$IMAGE" --type cyclonedx \
-  --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
+  --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" > /dev/null
 
 cosign verify-attestation "$IMAGE" --type cyclonedx \
   --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" \
   | jq -r .payload | base64 -d | jq .predicate > sbom-certifie.cdx.json
 ```
 
-Résultats : sortie à ajouter après la release `v2.0.0`.
+Résultats :
+```
+$ cosign verify "$IMAGE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
+Verification for ghcr.io/vitalikevin/tp_devsecops/api@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974 --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+
+$ jq -r '.bomFormat, .specVersion' sbom-certifie.cdx.json
+CycloneDX
+1.7
+$ jq '[.components[] | select(.type != "file")] | length' sbom-certifie.cdx.json
+44
+```
+Le SBOM extrait du registre contient les mêmes 44 composants que `sbom.cdx.json` (section 9).

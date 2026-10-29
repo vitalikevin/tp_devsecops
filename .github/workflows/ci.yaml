@@ -247,4 +247,4 @@ jobs:
       - run: |
           cosign verify-attestation "$IMAGE_NAME@$DIGEST" --type cyclonedx \
             --certificate-identity "$IDENTITY" \
-            --certificate-oidc-issuer "$ISSUER"
+            --certificate-oidc-issuer "$ISSUER" > /dev/null
