@@ -1,0 +1,9 @@
+# Porte bloquante : faille haute ou critique disposant d'un correctif
+fail-on-severity: high
+only-fixed: true
+output: table
+
+# Failles qualifiées non exploitables (OpenVEX), affichées comme supprimées
+vex-documents:
+  - security.vex.json
+show-suppressed: true
