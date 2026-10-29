@@ -61,13 +61,13 @@ Le venv est créé sans pip (`--without-pip`). Sinon, pip serait copié dans l'i
 
 ## 6. Sécurisation CI/CD
 
-Workflow `.github/workflows/ci.yaml` : lint-python, lint-docker → build + Dive → sbom → grype, trivy, integration → release.
+Workflow `.github/workflows/ci.yaml` : lint-python, lint-docker → build + Dive → sbom → grype, trivy, integration → release → sign → verify.
 
-**Permissions :** `permissions: {}` au niveau global. Chaque job demande `contents: read`, et seul `release` a `packages: write`. La connexion à GHCR se fait avec le `GITHUB_TOKEN`.
+**Permissions :** `permissions: {}` au niveau global. Chaque job demande `contents: read`. Seuls `release` et `sign` ont `packages: write`, et seul `sign` a `id-token: write` pour la signature keyless. La connexion à GHCR se fait avec le `GITHUB_TOKEN`.
 
 **Pinning :** toutes les actions sont épinglées par SHA de commit, la version étant notée en commentaire. Un tag peut être déplacé, un SHA non. L'image Dive est épinglée par digest.
 
-L'image est construite une seule fois, puis passée aux autres jobs en artefact. On publie donc celle qui a été scannée et testée.
+L'image amd64 (cible bake `api-ci`) est construite une seule fois, puis passée aux autres jobs en artefact : Dive, SBOM, Trivy, Grype et intégration portent sur la même image. La release la reconstruit en amd64 + arm64 à partir des mêmes sources et des mêmes `FROM` épinglés. C'est le digest de cet index multi-arch qui est signé puis vérifié.
 
 **SemVer :** la release ne part que sur un tag `vX.Y.Z`, et seulement si tous les jobs sont verts. `docker/metadata-action` génère les tags `X.Y.Z`, `X.Y` et `X`.
 
@@ -125,7 +125,57 @@ Digest: sha256:4624119c4e7b55989d1cc6789e96f223d89359223d2b24ac5fe6e87448fc6bf3
 Status: Image is up to date for ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
 ```
 
-## 8. Analyse de Traçabilité & Gouvernance VEX
+## 8. Preuves d'industrialisation BuildKit
+
+### Cache pip persistant
+
+Mesure sur un builder BuildKit neuf, donc avec un cache vide, puis après ajout d'une dépendance (`six==1.17.0`) dans `requirements.txt` :
+
+| Build | Durée totale | Étape `pip install` | Paquets téléchargés |
+|---|---|---|---|
+| Initial, à froid | 38,9 s | 4,1 s | 13 |
+| Après ajout d'une dépendance | 7,4 s | 2,5 s | 1 (`six`) |
+
+```
+$ docker buildx create --name tp2-bench --driver docker-container
+$ time docker buildx build --builder tp2-bench --secret id=pip_config,src=secrets/pip.conf --load -t tp2/api:bench .
+real    0m38.945s
+$ echo "six==1.17.0" >> requirements.txt
+$ time docker buildx build --builder tp2-bench --secret id=pip_config,src=secrets/pip.conf --load -t tp2/api:bench .
+#14 0.884 Using cached flask-3.1.3-py3-none-any.whl (103 kB)
+#14 0.888 Using cached psycopg2_binary-2.9.13-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.3 MB)
+#14 0.957 Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+real    0m7.379s
+```
+
+La couche `pip install` est reconstruite, mais pip ne retélécharge que `six`. Le cache reste dans le montage BuildKit, pas dans l'image. En CI, il est exporté vers le cache GitHub Actions (`type=gha`, `mode=max` dans `docker-bake.hcl`).
+
+### Secret de build
+
+Test avec un faux jeton (`tp2-faux-jeton-7f3c9a`) dans `secrets/pip.conf`. Ce fichier est ignoré par Git et exclu du contexte de build par `.dockerignore`.
+
+```
+$ docker history --no-trunc tp2/api:bench | grep -c tp2-faux-jeton
+0
+$ docker export $(docker create tp2/api:bench) | grep -ac tp2-faux-jeton
+0
+$ docker export $(docker create tp2/api:bench) | tar -t | grep -cE 'pip\.conf|\.cache/pip'
+0
+$ trivy image --scanners secret --exit-code 1 tp2/api:bench
+$ echo $?
+0
+```
+
+En CI, le job `build` affiche `docker history --no-trunc`, et le job `trivy` scanne aussi les secrets de l'image (scanner `secret` actif par défaut, `exit-code: 1`).
+
+### Manifeste multi-arch
+
+```
+$ docker buildx imagetools inspect ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
+```
+Sortie à ajouter après la release `v2.0.0`.
+
+## 9. Analyse de Traçabilité & Gouvernance VEX
 
 ### SBOM
 
@@ -216,3 +266,32 @@ $ grype sbom:sbom.cdx.json -o json | jq '[.ignoredMatches[] | {id: .vulnerabilit
   }
 ]
 ```
+
+## 10. Vérification publique pour l'évaluateur
+
+Image publiée :
+```
+ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:<digest>
+```
+
+Signature keyless, donc pas de `cosign.pub` : la vérification se fait sur l'identité OIDC du workflow (`IDENTITY` et `ISSUER` ci-dessous).
+
+Le job `sign` signe l'index multi-arch par son digest, puis lui attache le SBOM CycloneDX du job `sbom` en attestation. Le job `verify` refait les deux vérifications depuis ghcr.io et bloque la pipeline en cas d'échec.
+
+Commandes (cosign 3 et jq) :
+```bash
+IMAGE=ghcr.io/vitalikevin/tp_devsecops/api@sha256:<digest>
+IDENTITY=https://github.com/vitalikevin/tp_devsecops/.github/workflows/ci.yaml@refs/tags/v2.0.0
+ISSUER=https://token.actions.githubusercontent.com
+
+cosign verify "$IMAGE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
+
+cosign verify-attestation "$IMAGE" --type cyclonedx \
+  --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
+
+cosign verify-attestation "$IMAGE" --type cyclonedx \
+  --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" \
+  | jq -r .payload | base64 -d | jq .predicate > sbom-certifie.cdx.json
+```
+
+Résultats : sortie à ajouter après la release `v2.0.0`.
