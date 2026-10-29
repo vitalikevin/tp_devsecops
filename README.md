@@ -5,14 +5,16 @@
 Package de l'API : https://github.com/vitalikevin/tp_devsecops/pkgs/container/tp_devsecops%2Fapi
 
 ```bash
-docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
+docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0.1
+docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0
+docker pull ghcr.io/vitalikevin/tp_devsecops/api:2
 ```
 
 ## 2. Avant / Après
 
 | Critère | Avant | Après |
 |---|---|---|
-| Taille (compressée) | 54,4 Mo | 37,6 Mo |
+| Taille (compressée) | 54,4 Mo | 38,9 Mo |
 | Utilisateur | root | 65532 (nonroot) |
 | Shell | oui | non |
 | CVE Trivy | 185 (47 HIGH) | 0 |
@@ -20,7 +22,7 @@ docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
 
 ## 3. Images de base
 
-Image retenue pour l'API : **Chainguard Python**. Elle n'a ni shell ni gestionnaire de paquets, elle tourne en non-root par défaut, et elle a 0 CVE. Le build se fait dans `latest-dev`, qui contient pip, et l'exécution dans `latest`.
+Image retenue pour l'API : **Chainguard Python**. Elle n'a ni shell ni gestionnaire de paquets, elle tourne en non-root par défaut, et Trivy n'y relève aucune CVE. Le build se fait dans `latest-dev`, qui contient pip, et l'exécution dans `latest`.
 
 Pour garantir l'immuabilité, chaque `FROM` est épinglé par digest SHA256, et toutes les dépendances Python avec `==`.
 
@@ -61,11 +63,11 @@ Le venv est créé sans pip (`--without-pip`). Sinon, pip serait copié dans l'i
 
 ## 6. Sécurisation CI/CD
 
-Workflow `.github/workflows/ci.yaml` : lint-python, lint-docker → build + Dive → sbom → grype, trivy, integration → release → sign → verify.
+Workflow `.github/workflows/ci.yaml` : lint-python, lint-docker → build + Dive → sbom + grype, trivy, integration (en parallèle) → release → sign → verify.
 
 **Permissions :** `permissions: {}` au niveau global. Chaque job demande `contents: read`. Seuls `release` et `sign` ont `packages: write`, et seul `sign` a `id-token: write` pour la signature keyless. La connexion à GHCR se fait avec le `GITHUB_TOKEN`.
 
-**Pinning :** toutes les actions sont épinglées par SHA de commit, la version étant notée en commentaire. Un tag peut être déplacé, un SHA non. L'image Dive est épinglée par digest.
+**Pinning :** toutes les actions sont épinglées par SHA de commit, la version étant notée en commentaire. Un tag peut être déplacé, un SHA non. Les images Dive, Syft et Grype sont épinglées par digest.
 
 L'image amd64 (cible bake `api-ci`) est construite une seule fois, puis passée aux autres jobs en artefact : Dive, SBOM, Trivy, Grype et intégration portent sur la même image. La release la reconstruit en amd64 + arm64 à partir des mêmes sources et des mêmes `FROM` épinglés. C'est le digest de cet index multi-arch qui est signé puis vérifié.
 
@@ -91,7 +93,7 @@ $ echo $?
 
 **Dive :**
 ```
-  efficiency: 99.7592 %
+  efficiency: 99.7550 %
   PASS: lowestEfficiency
 Result:PASS [Total:3] [Passed:1] [Failed:0] [Warn:0] [Skipped:2]
 ```
@@ -120,9 +122,9 @@ $ curl -f http://localhost:5000/dbtest
 
 **Publication GHCR :**
 ```
-$ docker pull ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
-Digest: sha256:4624119c4e7b55989d1cc6789e96f223d89359223d2b24ac5fe6e87448fc6bf3
-Status: Image is up to date for ghcr.io/vitalikevin/tp_devsecops/api:1.0.0
+$ docker pull ghcr.io/vitalikevin/tp_devsecops/api:2.0.1
+Digest: sha256:abaf6c106c2ef00f7bcb8a985d8742a3eb645de73b4d570bcb8c245f000a048f
+Status: Downloaded newer image for ghcr.io/vitalikevin/tp_devsecops/api:2.0.1
 ```
 
 ## 8. Preuves d'industrialisation BuildKit
@@ -171,16 +173,16 @@ En CI, le job `build` affiche `docker history --no-trunc`, et le job `trivy` sca
 ### Manifeste multi-arch
 
 ```
-$ docker buildx imagetools inspect ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
-Name:      ghcr.io/vitalikevin/tp_devsecops/api:2.0.0
+$ docker buildx imagetools inspect ghcr.io/vitalikevin/tp_devsecops/api:2.0.1
+Name:      ghcr.io/vitalikevin/tp_devsecops/api:2.0.1
 MediaType: application/vnd.oci.image.index.v1+json
-Digest:    sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
+Digest:    sha256:abaf6c106c2ef00f7bcb8a985d8742a3eb645de73b4d570bcb8c245f000a048f
 
 Manifests:
-  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:826791e8ae0cc2ca0c3bccc958fd14e6596f990c8baa95878b397eda2ef4b35a
+  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.1@sha256:516f63ac3cd1c41be20cd4dfe7bf768b071a99b0be9508f43466a222e7979e64
   Platform:    linux/amd64
 
-  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:7aab2b4e72b0fb80ba23f9a122d2ffcede308023f3d0cb45bbb787f4b206fa05
+  Name:        ghcr.io/vitalikevin/tp_devsecops/api:2.0.1@sha256:9ac99a62cb2130f63d7ceec5ab1c4f09a08575504d3628904d5a3418fb919239
   Platform:    linux/arm64
 ```
 Les deux autres entrées de l'index (`unknown/unknown`) sont les attestations de provenance ajoutées par BuildKit.
@@ -281,7 +283,7 @@ $ grype sbom:sbom.cdx.json -o json | jq '[.ignoredMatches[] | {id: .vulnerabilit
 
 Image publiée :
 ```
-ghcr.io/vitalikevin/tp_devsecops/api:2.0.0@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
+ghcr.io/vitalikevin/tp_devsecops/api:2.0.1@sha256:abaf6c106c2ef00f7bcb8a985d8742a3eb645de73b4d570bcb8c245f000a048f
 ```
 
 Signature keyless, donc pas de `cosign.pub` : la vérification se fait sur l'identité OIDC du workflow (`IDENTITY` et `ISSUER` ci-dessous).
@@ -290,8 +292,8 @@ Le job `sign` signe l'index multi-arch par son digest, puis lui attache le SBOM 
 
 Commandes (cosign 3 et jq) :
 ```bash
-IMAGE=ghcr.io/vitalikevin/tp_devsecops/api@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974
-IDENTITY=https://github.com/vitalikevin/tp_devsecops/.github/workflows/ci.yaml@refs/tags/v2.0.0
+IMAGE=ghcr.io/vitalikevin/tp_devsecops/api@sha256:abaf6c106c2ef00f7bcb8a985d8742a3eb645de73b4d570bcb8c245f000a048f
+IDENTITY=https://github.com/vitalikevin/tp_devsecops/.github/workflows/ci.yaml@refs/tags/v2.0.1
 ISSUER=https://token.actions.githubusercontent.com
 
 cosign verify "$IMAGE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
@@ -307,7 +309,7 @@ cosign verify-attestation "$IMAGE" --type cyclonedx \
 Résultats :
 ```
 $ cosign verify "$IMAGE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER"
-Verification for ghcr.io/vitalikevin/tp_devsecops/api@sha256:d9b406e5b6532ae37feec9cedf98751ca3ef91f53891b32a87dba73eb83bc974 --
+Verification for ghcr.io/vitalikevin/tp_devsecops/api@sha256:abaf6c106c2ef00f7bcb8a985d8742a3eb645de73b4d570bcb8c245f000a048f --
 The following checks were performed on each of these signatures:
   - The cosign claims were validated
   - Existence of the claims in the transparency log was verified offline
